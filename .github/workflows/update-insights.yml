@@ -1,0 +1,73 @@
+name: Update Space-Track Insights
+
+on:
+  schedule:
+    - cron: "29 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_refresh:
+        description: "Ignore cached Space-Track insight inputs"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-orbit-insights
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out private pipeline
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: SamueleMarcucci/satellite-catalog-mirror
+          ssh-key: ${{ secrets.MIRROR_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests
+
+      - name: Build and upload Space-Track insights
+        env:
+          SPACE_TRACK_IDENTITY: ${{ secrets.SPACE_TRACK_IDENTITY }}
+          SPACE_TRACK_PASSWORD: ${{ secrets.SPACE_TRACK_PASSWORD }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          PUBLIC_CATALOG_BASE_URL: ${{ secrets.PUBLIC_CATALOG_BASE_URL }}
+          PUBLIC_INSIGHTS_BASE_URL: ${{ secrets.PUBLIC_INSIGHTS_BASE_URL }}
+          INSIGHTS_PREFIX: ${{ vars.INSIGHTS_PREFIX || 'insights/' }}
+          INSIGHTS_FETCH_SATNOGS: "true"
+          INSIGHTS_FETCH_PREDICTED_APPROACHES: "true"
+          DISCOS_API_TOKEN: ${{ secrets.DISCOS_API_TOKEN }}
+          ITU_SPACE_EXPLORER_API_TOKEN: ${{ secrets.ITU_SPACE_EXPLORER_API_TOKEN }}
+        run: |
+          args=""
+          if [ "${{ github.event.inputs.force_refresh || 'false' }}" = "true" ]; then
+            args="--force-refresh"
+          fi
+          python -u scripts/build_insights.py --output-dir public/insights --timeout 75 --optional-timeout 25 $args
+
+      - name: Notify owner on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: >
+          python scripts/owner_alerts.py send
+          --title "Live Orbit insights refresh failed"
+          --message "The public scheduler insights workflow did not complete."

@@ -1,0 +1,63 @@
+name: Update TLE Catalog
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_full:
+        description: "Force full Space-Track GP catalog refresh"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-orbit-catalog
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out private pipeline
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: SamueleMarcucci/satellite-catalog-mirror
+          ssh-key: ${{ secrets.MIRROR_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests
+
+      - name: Update catalog mirror
+        env:
+          SPACE_TRACK_IDENTITY: ${{ secrets.SPACE_TRACK_IDENTITY }}
+          SPACE_TRACK_PASSWORD: ${{ secrets.SPACE_TRACK_PASSWORD }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          PUBLIC_CATALOG_BASE_URL: ${{ secrets.PUBLIC_CATALOG_BASE_URL }}
+          FORCE_FULL: ${{ github.event.inputs.force_full || 'false' }}
+        run: python scripts/mirror_spacetrack.py --output-dir build/catalog
+
+      - name: Notify owner on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: >
+          python scripts/owner_alerts.py send
+          --title "Live Orbit catalog refresh failed"
+          --message "The public scheduler catalog workflow did not complete."
