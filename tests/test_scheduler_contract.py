@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -41,6 +42,36 @@ class SchedulerContractTests(unittest.TestCase):
         self.assertIn('cron: "2-59/5 * * * *"', (WORKFLOW_DIR / "update-snapshot.yml").read_text())
         self.assertIn('cron: "17 * * * *"', (WORKFLOW_DIR / "update-catalog.yml").read_text())
         self.assertIn('cron: "29 * * * *"', (WORKFLOW_DIR / "update-insights.yml").read_text())
+
+    def test_private_pipeline_output_is_suppressed_in_public_logs(self) -> None:
+        for name in DATA_WORKFLOWS:
+            path = WORKFLOW_DIR / name
+            with self.subTest(workflow=path.name):
+                source = path.read_text()
+                self.assertIn('private pipeline output suppressed', source)
+                self.assertRegex(source, r'>"\$RUNNER_TEMP/[^"\n]+\.log" 2>&1')
+
+    def test_public_repository_contains_no_high_confidence_secret_material(self) -> None:
+        secret_patterns = {
+            "private key": re.compile(r"-----BEGIN (?:OPENSSH|RSA|EC|DSA|PGP) PRIVATE KEY-----"),
+            "GitHub token": re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b"),
+            "GitHub fine-grained token": re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+            "Slack webhook": re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/_-]+"),
+            "credential-bearing URL": re.compile(r"https?://[^\s/:]+:[^\s/@]+@"),
+        }
+        for path in ROOT.rglob("*"):
+            if not path.is_file() or ".git" in path.parts or "__pycache__" in path.parts:
+                continue
+            source = path.read_text(errors="ignore")
+            for label, pattern in secret_patterns.items():
+                with self.subTest(path=path.relative_to(ROOT), secret_type=label):
+                    self.assertIsNone(pattern.search(source))
+
+    def test_security_contract_workflow_has_no_pipeline_secrets(self) -> None:
+        source = (WORKFLOW_DIR / "security-contract.yml").read_text()
+        self.assertNotIn("secrets.", source)
+        self.assertNotIn("satellite-catalog-mirror", source)
+        self.assertIn("python -m unittest discover -s tests -v", source)
 
 
 if __name__ == "__main__":

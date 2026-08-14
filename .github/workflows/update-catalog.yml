@@ -36,10 +36,24 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: |
+          if python -m pip install -r requirements.txt >"$RUNNER_TEMP/dependencies.log" 2>&1; then
+            echo "Dependencies installed."
+          else
+            status=$?
+            echo "::error::Dependency installation failed; private pipeline output suppressed."
+            exit "$status"
+          fi
 
       - name: Run unit tests
-        run: python -m unittest discover -s tests
+        run: |
+          if python -m unittest discover -s tests >"$RUNNER_TEMP/unit-tests.log" 2>&1; then
+            echo "Private pipeline tests passed."
+          else
+            status=$?
+            echo "::error::Private pipeline tests failed; private pipeline output suppressed."
+            exit "$status"
+          fi
 
       - name: Update catalog mirror
         env:
@@ -51,13 +65,27 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           PUBLIC_CATALOG_BASE_URL: ${{ secrets.PUBLIC_CATALOG_BASE_URL }}
           FORCE_FULL: ${{ github.event.inputs.force_full || 'false' }}
-        run: python scripts/mirror_spacetrack.py --output-dir build/catalog
+        run: |
+          if python scripts/mirror_spacetrack.py --output-dir build/catalog >"$RUNNER_TEMP/catalog-refresh.log" 2>&1; then
+            echo "Catalog refresh completed."
+          else
+            status=$?
+            echo "::error::Catalog refresh failed; private pipeline output suppressed."
+            exit "$status"
+          fi
 
       - name: Notify owner on failure
         if: failure()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: >
-          python scripts/owner_alerts.py send
-          --title "Live Orbit catalog refresh failed"
-          --message "The public scheduler catalog workflow did not complete."
+        run: |
+          if python scripts/owner_alerts.py send \
+            --title "Live Orbit catalog refresh failed" \
+            --message "The public scheduler catalog workflow did not complete." \
+            >"$RUNNER_TEMP/owner-notification.log" 2>&1; then
+            echo "Owner notification completed."
+          else
+            status=$?
+            echo "::error::Owner notification failed; private pipeline output suppressed."
+            exit "$status"
+          fi

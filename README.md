@@ -19,6 +19,10 @@ repository secrets to forks, and none of these workflows run for pull requests.
 The monthly heartbeat changes only `.scheduler-keepalive`; it never checks out
 the private implementation or receives pipeline secrets.
 
+Private pipeline command output is suppressed in public Actions logs. The logs
+show only the step outcome; detailed implementation output remains private. A
+secret-material regression check runs whenever `main` changes.
+
 ## Required secrets
 
 - `MIRROR_DEPLOY_KEY`
