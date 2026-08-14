@@ -42,10 +42,24 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: |
+          if python -m pip install -r requirements.txt >"$RUNNER_TEMP/dependencies.log" 2>&1; then
+            echo "Dependencies installed."
+          else
+            status=$?
+            echo "::error::Dependency installation failed; private pipeline output suppressed."
+            exit "$status"
+          fi
 
       - name: Run unit tests
-        run: python -m unittest discover -s tests
+        run: |
+          if python -m unittest discover -s tests >"$RUNNER_TEMP/unit-tests.log" 2>&1; then
+            echo "Private pipeline tests passed."
+          else
+            status=$?
+            echo "::error::Private pipeline tests failed; private pipeline output suppressed."
+            exit "$status"
+          fi
 
       - name: Refresh TLE catalog
         env:
@@ -57,7 +71,14 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           PUBLIC_CATALOG_BASE_URL: ${{ secrets.PUBLIC_CATALOG_BASE_URL }}
           FORCE_FULL: ${{ github.event.inputs.force_full_catalog || 'false' }}
-        run: python scripts/mirror_spacetrack.py --output-dir build/catalog
+        run: |
+          if python scripts/mirror_spacetrack.py --output-dir build/catalog >"$RUNNER_TEMP/catalog-refresh.log" 2>&1; then
+            echo "Catalog refresh completed."
+          else
+            status=$?
+            echo "::error::Catalog refresh failed; private pipeline output suppressed."
+            exit "$status"
+          fi
 
       - name: Refresh server snapshot
         env:
@@ -66,7 +87,14 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           PUBLIC_SNAPSHOT_BASE_URL: ${{ secrets.PUBLIC_SNAPSHOT_BASE_URL }}
-        run: python scripts/build_snapshot.py --output-dir build/snapshots
+        run: |
+          if python scripts/build_snapshot.py --output-dir build/snapshots >"$RUNNER_TEMP/snapshot-refresh.log" 2>&1; then
+            echo "Snapshot refresh completed."
+          else
+            status=$?
+            echo "::error::Snapshot refresh failed; private pipeline output suppressed."
+            exit "$status"
+          fi
 
       - name: Refresh Space-Track insights
         env:
@@ -84,17 +112,30 @@ jobs:
           DISCOS_API_TOKEN: ${{ secrets.DISCOS_API_TOKEN }}
           ITU_SPACE_EXPLORER_API_TOKEN: ${{ secrets.ITU_SPACE_EXPLORER_API_TOKEN }}
         run: |
-          args=""
+          args=()
           if [ "${{ github.event.inputs.force_insights_refresh || 'false' }}" = "true" ]; then
-            args="--force-refresh"
+            args+=(--force-refresh)
           fi
-          python -u scripts/build_insights.py --output-dir public/insights --timeout 75 --optional-timeout 25 $args
+          if python -u scripts/build_insights.py --output-dir public/insights --timeout 75 --optional-timeout 25 "${args[@]}" >"$RUNNER_TEMP/insights-refresh.log" 2>&1; then
+            echo "Insights refresh completed."
+          else
+            status=$?
+            echo "::error::Insights refresh failed; private pipeline output suppressed."
+            exit "$status"
+          fi
 
       - name: Notify owner on failure
         if: failure()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: >
-          python scripts/owner_alerts.py send
-          --title "Live Orbit refresh failed"
-          --message "The public scheduler full refresh did not complete."
+        run: |
+          if python scripts/owner_alerts.py send \
+            --title "Live Orbit refresh failed" \
+            --message "The public scheduler full refresh did not complete." \
+            >"$RUNNER_TEMP/owner-notification.log" 2>&1; then
+            echo "Owner notification completed."
+          else
+            status=$?
+            echo "::error::Owner notification failed; private pipeline output suppressed."
+            exit "$status"
+          fi
