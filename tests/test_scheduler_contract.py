@@ -4,6 +4,13 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
+DATA_WORKFLOWS = (
+    "owner-alerts.yml",
+    "refresh-all-data.yml",
+    "update-catalog.yml",
+    "update-insights.yml",
+    "update-snapshot.yml",
+)
 
 
 class SchedulerContractTests(unittest.TestCase):
@@ -15,13 +22,20 @@ class SchedulerContractTests(unittest.TestCase):
                 self.assertIn("runs-on: ubuntu-latest", source)
 
     def test_private_source_checkout_is_read_only_and_sha_pinned(self) -> None:
-        for path in WORKFLOW_DIR.glob("*.yml"):
+        for name in DATA_WORKFLOWS:
+            path = WORKFLOW_DIR / name
             with self.subTest(workflow=path.name):
                 source = path.read_text()
                 self.assertIn("repository: SamueleMarcucci/satellite-catalog-mirror", source)
                 self.assertIn("ssh-key: ${{ secrets.MIRROR_DEPLOY_KEY }}", source)
                 self.assertIn("persist-credentials: false", source)
                 self.assertIn("actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803", source)
+
+    def test_keepalive_cannot_receive_pipeline_secrets(self) -> None:
+        source = (WORKFLOW_DIR / "scheduler-keepalive.yml").read_text()
+        self.assertNotIn("secrets.", source)
+        self.assertNotIn("satellite-catalog-mirror", source)
+        self.assertIn("contents: write", source)
 
     def test_intended_cadences_are_preserved(self) -> None:
         self.assertIn('cron: "2-59/5 * * * *"', (WORKFLOW_DIR / "update-snapshot.yml").read_text())
