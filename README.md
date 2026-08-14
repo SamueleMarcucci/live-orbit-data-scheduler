@@ -7,7 +7,7 @@ read-only deploy key at runtime.
 
 ## Cadence
 
-- Satellite snapshot: every 5 minutes.
+- Satellite snapshot: every 5 minutes, staggered to minutes 02/07/12/.../57.
 - TLE catalog: hourly at minute 17.
 - Space-Track insights: hourly at minute 29.
 - Backend health: every 5 hours.
