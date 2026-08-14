@@ -11,10 +11,13 @@ read-only deploy key at runtime.
 - TLE catalog: hourly at minute 17.
 - Space-Track insights: hourly at minute 29.
 - Backend health: every 5 hours.
+- Scheduler heartbeat: monthly, to prevent GitHub's 60-day inactivity shutdown.
 - Full refresh: manual only.
 
 The workflows use standard GitHub-hosted Linux runners. GitHub does not provide
 repository secrets to forks, and none of these workflows run for pull requests.
+The monthly heartbeat changes only `.scheduler-keepalive`; it never checks out
+the private implementation or receives pipeline secrets.
 
 ## Required secrets
 

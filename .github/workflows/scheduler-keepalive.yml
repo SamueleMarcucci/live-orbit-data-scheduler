@@ -1,0 +1,30 @@
+name: Keep Scheduler Active
+
+on:
+  schedule:
+    - cron: "43 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live-orbit-scheduler-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out scheduler
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Record scheduler activity
+        run: |
+          date -u "+%Y-%m-%dT%H:%M:%SZ" > .scheduler-keepalive
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .scheduler-keepalive
+          git commit -m "chore: keep scheduled workflows active"
+          git push origin HEAD:main
