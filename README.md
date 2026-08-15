@@ -7,6 +7,7 @@ are checked out with dedicated read-only deploy keys at runtime.
 ## Cadence
 
 - Satellite snapshot: every 5 minutes, staggered to minutes 02/07/12/.../57.
+- Deep-space ephemeris: every 5 minutes, staggered to minutes 04/09/14/.../59.
 - TLE catalog: hourly at minute 17.
 - Space-Track insights: hourly at minute 29.
 - Field Guide: every 6 hours at minute 17.
