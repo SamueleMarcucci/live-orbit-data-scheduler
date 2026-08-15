@@ -9,12 +9,17 @@ DATA_WORKFLOWS = (
     "owner-alerts.yml",
     "refresh-all-data.yml",
     "update-catalog.yml",
+    "update-ephemeris.yml",
     "update-field-guide.yml",
     "update-insights.yml",
     "update-snapshot.yml",
 )
+APP_DATA_WORKFLOWS = (
+    "update-ephemeris.yml",
+    "update-field-guide.yml",
+)
 MIRROR_DATA_WORKFLOWS = tuple(
-    name for name in DATA_WORKFLOWS if name != "update-field-guide.yml"
+    name for name in DATA_WORKFLOWS if name not in APP_DATA_WORKFLOWS
 )
 
 
@@ -36,12 +41,15 @@ class SchedulerContractTests(unittest.TestCase):
                 self.assertIn("persist-credentials: false", source)
                 self.assertIn("actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803", source)
 
-    def test_field_guide_checkout_is_read_only_and_sha_pinned(self) -> None:
-        source = (WORKFLOW_DIR / "update-field-guide.yml").read_text()
-        self.assertIn("repository: SamueleMarcucci/live-orbit-app-backup", source)
-        self.assertIn("ssh-key: ${{ secrets.APP_DEPLOY_KEY }}", source)
-        self.assertIn("persist-credentials: false", source)
-        self.assertIn("actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803", source)
+    def test_app_pipeline_checkouts_are_read_only_and_sha_pinned(self) -> None:
+        for name in APP_DATA_WORKFLOWS:
+            path = WORKFLOW_DIR / name
+            with self.subTest(workflow=path.name):
+                source = path.read_text()
+                self.assertIn("repository: SamueleMarcucci/live-orbit-app-backup", source)
+                self.assertIn("ssh-key: ${{ secrets.APP_DEPLOY_KEY }}", source)
+                self.assertIn("persist-credentials: false", source)
+                self.assertIn("actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803", source)
 
     def test_keepalive_cannot_receive_pipeline_secrets(self) -> None:
         source = (WORKFLOW_DIR / "scheduler-keepalive.yml").read_text()
@@ -52,6 +60,7 @@ class SchedulerContractTests(unittest.TestCase):
     def test_intended_cadences_are_preserved(self) -> None:
         self.assertIn('cron: "2-59/5 * * * *"', (WORKFLOW_DIR / "update-snapshot.yml").read_text())
         self.assertIn('cron: "17 * * * *"', (WORKFLOW_DIR / "update-catalog.yml").read_text())
+        self.assertIn('cron: "4-59/5 * * * *"', (WORKFLOW_DIR / "update-ephemeris.yml").read_text())
         self.assertIn('cron: "17 */6 * * *"', (WORKFLOW_DIR / "update-field-guide.yml").read_text())
         self.assertIn('cron: "29 * * * *"', (WORKFLOW_DIR / "update-insights.yml").read_text())
 

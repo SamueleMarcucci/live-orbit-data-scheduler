@@ -1,0 +1,105 @@
+name: Update Deep-Space Ephemeris
+
+on:
+  schedule:
+    - cron: "4-59/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: live-orbit-ephemeris-publication
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: CatalogMirror
+    steps:
+      - name: Check out private app pipeline
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: SamueleMarcucci/live-orbit-app-backup
+          ssh-key: ${{ secrets.APP_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: CatalogMirror/requirements.lock
+
+      - name: Install locked dependencies
+        run: |
+          if python -m pip install --require-hashes -r requirements.lock >"$RUNNER_TEMP/dependencies.log" 2>&1; then
+            echo "Dependencies installed."
+          else
+            status=$?
+            echo "::error::Dependency installation failed; private pipeline output suppressed."
+            exit "$status"
+          fi
+
+      - name: Run ephemeris unit tests
+        run: |
+          if python -m unittest discover -s tests -p 'test_ephemeris_snapshot.py' >"$RUNNER_TEMP/ephemeris-tests.log" 2>&1; then
+            echo "Private ephemeris tests passed."
+          else
+            status=$?
+            echo "::error::Private ephemeris tests failed; private pipeline output suppressed."
+            exit "$status"
+          fi
+
+      - name: Guard against an active or cooling-down ephemeris writer
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if python scripts/owner_alerts.py guard-publication \
+            --workflow update-ephemeris.yml \
+            --workflow refresh-all-data.yml \
+            --cooldown-minutes 2 \
+            >"$RUNNER_TEMP/ephemeris-guard.log" 2>&1; then
+            echo "Ephemeris publication guard passed."
+          else
+            status=$?
+            echo "::error::Ephemeris publication guard stopped this run; private pipeline output suppressed."
+            exit "$status"
+          fi
+
+      - name: Build and publish ephemeris snapshot
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          PUBLIC_EPHEMERIS_BASE_URL: https://api.liveorbitapp.com/ephemeris
+          EPHEMERIS_PREFIX: ephemeris/
+        run: |
+          if python scripts/build_ephemeris.py --output-dir build/ephemeris >"$RUNNER_TEMP/ephemeris-refresh.log" 2>&1; then
+            echo "Ephemeris refresh completed."
+          else
+            status=$?
+            echo "::error::Ephemeris refresh failed; private pipeline output suppressed."
+            exit "$status"
+          fi
+
+      - name: Notify owner on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if python scripts/owner_alerts.py send \
+            --title "Live Orbit ephemeris refresh failed" \
+            --message "The public scheduler ephemeris workflow did not complete." \
+            >"$RUNNER_TEMP/owner-notification.log" 2>&1; then
+            echo "Owner notification completed."
+          else
+            status=$?
+            echo "::error::Owner notification failed; private pipeline output suppressed."
+            exit "$status"
+          fi
