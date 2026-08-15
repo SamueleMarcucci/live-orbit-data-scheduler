@@ -1,15 +1,15 @@
 # Live Orbit Data Scheduler
 
 This public repository contains only the GitHub Actions schedules for Live
-Orbit's data pipelines. The implementation remains in the private
-`SamueleMarcucci/satellite-catalog-mirror` repository and is checked out with a
-read-only deploy key at runtime.
+Orbit's data pipelines. The implementations remain in private repositories and
+are checked out with dedicated read-only deploy keys at runtime.
 
 ## Cadence
 
 - Satellite snapshot: every 5 minutes, staggered to minutes 02/07/12/.../57.
 - TLE catalog: hourly at minute 17.
 - Space-Track insights: hourly at minute 29.
+- Field Guide: every 6 hours at minute 17.
 - Backend health: every 5 hours.
 - Scheduler heartbeat: monthly, to prevent GitHub's 60-day inactivity shutdown.
 - Full refresh: manual only.
@@ -26,6 +26,7 @@ secret-material regression check runs whenever `main` changes.
 ## Required secrets
 
 - `MIRROR_DEPLOY_KEY`
+- `APP_DEPLOY_KEY`
 - `SPACE_TRACK_IDENTITY`
 - `SPACE_TRACK_PASSWORD`
 - `R2_ACCOUNT_ID`
