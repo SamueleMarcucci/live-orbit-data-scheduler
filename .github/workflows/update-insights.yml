@@ -83,19 +83,3 @@ jobs:
             echo "::error::Insights refresh failed; private pipeline output suppressed."
             exit "$status"
           fi
-
-      - name: Notify owner on failure
-        if: failure()
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          if python scripts/owner_alerts.py send \
-            --title "Live Orbit insights refresh failed" \
-            --message "The public scheduler insights workflow did not complete." \
-            >"$RUNNER_TEMP/owner-notification.log" 2>&1; then
-            echo "Owner notification completed."
-          else
-            status=$?
-            echo "::error::Owner notification failed; private pipeline output suppressed."
-            exit "$status"
-          fi
