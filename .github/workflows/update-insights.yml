@@ -93,6 +93,15 @@ jobs:
           else
             status=$?
             echo "::error::Insights refresh failed; private pipeline output suppressed."
+            python - <<'PY_DIAGNOSTIC'
+          import json, os, pathlib, re
+          text = (pathlib.Path(os.environ["RUNNER_TEMP"]) / "insights-refresh.log").read_text(errors="replace")
+          classes = re.findall(r"^(?:[A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z_][A-Za-z0-9_]*):", text, re.M)
+          allowed = {"ReadTimeout", "ConnectTimeout", "HTTPError", "ClientError", "RuntimeError", "ValueError", "KeyError", "TimeoutError", "EndpointConnectionError", "ReadTimeoutError"}
+          stages = [name for name in ("restore_cache", "space_track_login", "load_or_fetch_rows", "read_identity_index", "save_cache", "upload_outputs_to_r2", "publish_r2_generation") if "in " + name in text]
+          statuses = re.findall(r"(?:HTTP |HTTPError: )(\d{3})", text)
+          print(json.dumps({"failure_category": classes[-1] if classes and classes[-1] in allowed else "other", "failure_stages": stages, "http_status": statuses[-1] if statuses else None, "fact_build_started": "Building Space-Track insights and satellite fact shards..." in text}))
+          PY_DIAGNOSTIC
             exit "$status"
           fi
 
