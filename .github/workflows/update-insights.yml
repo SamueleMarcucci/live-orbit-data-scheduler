@@ -9,6 +9,10 @@ on:
         description: "Ignore cached Space-Track insight inputs"
         required: false
         default: "false"
+      verify_metadata:
+        description: "Read back the committed compact metadata and compare every identity field"
+        required: false
+        default: "false"
 
 permissions:
   contents: read
@@ -77,6 +81,15 @@ jobs:
           fi
           if python -u scripts/build_insights.py --output-dir public/insights --timeout 75 --optional-timeout 25 "${args[@]}" >"$RUNNER_TEMP/insights-refresh.log" 2>&1; then
             echo "Insights refresh completed."
+            if [ "${{ github.event.inputs.verify_metadata || 'false' }}" = "true" ]; then
+              if python scripts/verify_metadata_publication.py >"$RUNNER_TEMP/metadata-verification.json" 2>"$RUNNER_TEMP/metadata-verification-errors.log"; then
+                cat "$RUNNER_TEMP/metadata-verification.json"
+              else
+                status=$?
+                echo "::error::Committed metadata verification failed; private pipeline output suppressed."
+                exit "$status"
+              fi
+            fi
           else
             status=$?
             echo "::error::Insights refresh failed; private pipeline output suppressed."
