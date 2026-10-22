@@ -62,7 +62,7 @@ class SchedulerContractTests(unittest.TestCase):
         self.assertIn('cron: "17 * * * *"', (WORKFLOW_DIR / "update-catalog.yml").read_text())
         self.assertIn('cron: "4-59/5 * * * *"', (WORKFLOW_DIR / "update-ephemeris.yml").read_text())
         self.assertIn('cron: "17 */6 * * *"', (WORKFLOW_DIR / "update-field-guide.yml").read_text())
-        self.assertIn('cron: "29 * * * *"', (WORKFLOW_DIR / "update-insights.yml").read_text())
+        self.assertIn('cron: "9,24,39,54 * * * *"', (WORKFLOW_DIR / "update-insights.yml").read_text())
 
     def test_private_pipeline_output_is_suppressed_in_public_logs(self) -> None:
         for name in DATA_WORKFLOWS:
