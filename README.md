@@ -9,7 +9,7 @@ are checked out with dedicated read-only deploy keys at runtime.
 - Satellite snapshot: every 5 minutes, staggered to minutes 02/07/12/.../57.
 - Deep-space ephemeris: every 5 minutes, staggered to minutes 04/09/14/.../59.
 - TLE catalog: hourly at minute 17.
-- Space-Track insights: hourly at minute 29.
+- Space-Track insights: every 15 minutes at minutes 09/24/39/54.
 - Field Guide: every 6 hours at minute 17.
 - Backend health: every 5 hours.
 - Scheduler heartbeat: monthly, to prevent GitHub's 60-day inactivity shutdown.

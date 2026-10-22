@@ -47,7 +47,7 @@ jobs:
 
       - name: Run ephemeris unit tests
         run: |
-          if python -m unittest discover -s tests -p 'test_ephemeris_snapshot.py' >"$RUNNER_TEMP/ephemeris-tests.log" 2>&1; then
+          if python -m unittest discover -s tests -p 'test_ephemeris*.py' >"$RUNNER_TEMP/ephemeris-tests.log" 2>&1; then
             echo "Private ephemeris tests passed."
           else
             status=$?
@@ -56,6 +56,7 @@ jobs:
           fi
 
       - name: Guard against an active or cooling-down ephemeris writer
+        id: publication_guard
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -63,15 +64,17 @@ jobs:
             --workflow update-ephemeris.yml \
             --workflow refresh-all-data.yml \
             --cooldown-minutes 2 \
+            --skip-if-blocked \
             >"$RUNNER_TEMP/ephemeris-guard.log" 2>&1; then
-            echo "Ephemeris publication guard passed."
+            echo "Ephemeris publication guard check completed."
           else
             status=$?
-            echo "::error::Ephemeris publication guard stopped this run; private pipeline output suppressed."
+            echo "::error::Ephemeris publication guard lookup failed; private pipeline output suppressed."
             exit "$status"
           fi
 
       - name: Build and publish ephemeris snapshot
+        if: steps.publication_guard.outputs.publication_allowed == 'true'
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -80,12 +83,21 @@ jobs:
           PUBLIC_EPHEMERIS_BASE_URL: https://api.liveorbitapp.com/ephemeris
           EPHEMERIS_PREFIX: ephemeris/
         run: |
-          if python scripts/build_ephemeris.py --output-dir build/ephemeris >"$RUNNER_TEMP/ephemeris-refresh.log" 2>&1; then
+          if python scripts/build_ephemeris.py --output-dir build/ephemeris \
+            --diagnostic-file "$RUNNER_TEMP/ephemeris-diagnostic.json" \
+            >"$RUNNER_TEMP/ephemeris-refresh.log" 2>&1; then
             echo "Ephemeris refresh completed."
           else
             status=$?
             echo "::error::Ephemeris refresh failed; private pipeline output suppressed."
             exit "$status"
+          fi
+
+      - name: Report safe ephemeris diagnostics
+        if: always() && steps.publication_guard.outputs.publication_allowed == 'true'
+        run: |
+          if [ -f "$RUNNER_TEMP/ephemeris-diagnostic.json" ]; then
+            cat "$RUNNER_TEMP/ephemeris-diagnostic.json"
           fi
 
       - name: Notify owner on failure
